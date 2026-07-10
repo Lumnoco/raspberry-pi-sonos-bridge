@@ -301,7 +301,9 @@ _gena_sids  = {}  # service_path → SID
 _gena_lock  = threading.Lock()
 
 # Only subscribe to AVTransport so we can detect hardware button presses.
-_GENA_SERVICES = ["/MediaRenderer/AVTransport/EventSub"]
+# Path is the eventSubURL from the Sonos device description — note it is
+# /Event, not the /EventSub suffix some UPnP stacks use.
+_GENA_SERVICES = ["/MediaRenderer/AVTransport/Event"]
 
 
 def _gena_request(method, service, extra_headers):
@@ -355,6 +357,9 @@ def _gena_subscribe_all():
             if sid:
                 _gena_sids[svc] = sid
             else:
+                # Warning, not debug: a silent subscribe failure means
+                # hardware button relay quietly stops working.
+                log.warning("GENA subscribe failed for %s — button relay inactive", svc)
                 all_ok = False
     return all_ok
 
