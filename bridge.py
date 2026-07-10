@@ -530,6 +530,15 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
             return
 
+        # No session, no stream. After session/stop the Sonos often re-fetches
+        # the URI before the Stop command lands; serving that would spawn an
+        # orphaned ffmpeg for a dead session that holds the stream lock.
+        with _state_lock:
+            in_session = _in_session
+        if not in_session:
+            self.send_error(503, "No active AirPlay session")
+            return
+
         # Serialise connections: Sonos sometimes opens multiple simultaneous
         # connections; only the first gets the stream, others get 503.
         if not _stream_lock.acquire(timeout=8):
