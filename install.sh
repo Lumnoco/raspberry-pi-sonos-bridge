@@ -21,17 +21,22 @@ echo "Installing shairport-sync config..."
 cp shairport-sync.conf /etc/shairport-sync.conf
 
 echo "Installing hook scripts..."
-cp scripts/airplay-session-start  /usr/local/bin/airplay-session-start
-cp scripts/airplay-session-end    /usr/local/bin/airplay-session-end
-cp scripts/airplay-active-start   /usr/local/bin/airplay-active-start
-cp scripts/airplay-active-end     /usr/local/bin/airplay-active-end
-cp scripts/airplay-volume         /usr/local/bin/airplay-volume
-chmod +x /usr/local/bin/airplay-*
+HOOKS="airplay-session-start airplay-session-end airplay-active-start airplay-active-end airplay-volume"
+for hook in $HOOKS; do
+  cp "scripts/$hook" "/usr/local/bin/$hook"
+  chmod +x "/usr/local/bin/$hook"
+done
 
 echo "Installing systemd service..."
 cp sonos-bridge.service /etc/systemd/system/sonos-bridge.service
 systemctl daemon-reload
 systemctl enable sonos-bridge
+
+# Apply the new config and hook scripts if shairport-sync is already running
+if systemctl is-active --quiet shairport-sync; then
+  echo "Restarting shairport-sync to apply config..."
+  systemctl restart shairport-sync
+fi
 
 if [ ! -f /etc/sonos-bridge.conf ]; then
   cp sonos-bridge.conf.example /etc/sonos-bridge.conf
