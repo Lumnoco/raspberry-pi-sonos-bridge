@@ -1,5 +1,7 @@
 # Raspberry Pi Sonos AirPlay Bridge
 
+[![CI](https://github.com/Lumnoco/raspberry-pi-sonos-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/Lumnoco/raspberry-pi-sonos-bridge/actions/workflows/ci.yml)
+
 Stream Apple Music (and any AirPlay source) to a Sonos speaker using a Raspberry Pi as a bridge. The Pi appears as an AirPlay device in your Apple ecosystem, receives the audio via shairport-sync, and forwards it to Sonos over its native UPnP/SOAP protocol.
 
 ## How it works
