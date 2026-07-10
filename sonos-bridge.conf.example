@@ -1,0 +1,10 @@
+# Sonos AirPlay Bridge configuration
+# Copy to /etc/sonos-bridge.conf and fill in your values.
+# Run `sudo python3 /opt/sonos-bridge/bridge.py --discover` to find your RINCON ID.
+
+SONOS_RINCON="RINCON_XXXXXXXXXXXXXXXXXXXX"
+
+# Optional overrides (defaults shown):
+# MY_IP=""           # auto-detected from default network interface
+# STREAM_PORT="8080" # port the bridge HTTP server listens on
+# PIPE_PATH="/run/sonos-bridge/audio"  # must match shairport-sync.conf

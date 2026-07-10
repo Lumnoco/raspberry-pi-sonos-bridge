@@ -1,0 +1,16 @@
+#!/bin/bash
+# Called by shairport-sync with AirPlay volume in dB as $1.
+# AirPlay range: 0.0 (max) to -30.0 (min); -144.0 = mute.
+# Maps linearly to Sonos 0-100.
+AIRPLAY_DB="$1"
+[ -z "$AIRPLAY_DB" ] && exit 0
+
+SONOS_VOL=$(python3 -c "
+v = float('$AIRPLAY_DB')
+if v <= -30.0 or v <= -144.0:
+    print(0)
+else:
+    print(max(0, min(100, round((v + 30) / 30 * 100))))
+")
+
+curl -s -X POST "http://localhost:8080/volume/$SONOS_VOL" > /dev/null
