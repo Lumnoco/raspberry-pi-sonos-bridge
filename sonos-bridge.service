@@ -16,5 +16,19 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
+# Sandboxing. Still runs as root because shairport-sync's system-bus D-Bus
+# policy may not allow other users to call its MPRIS interface, but the
+# filesystem and kernel surface are locked down.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+# AF_UNIX for D-Bus (MPRIS relay), AF_INET/AF_INET6 for HTTP/SSDP/SOAP
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
 [Install]
 WantedBy=multi-user.target

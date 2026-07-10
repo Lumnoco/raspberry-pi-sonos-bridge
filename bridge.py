@@ -316,6 +316,9 @@ def _gena_request(method, service, extra_headers):
         resp = conn.getresponse()
         resp.read()
         conn.close()
+        if not 200 <= resp.status < 300:
+            log.debug("GENA %s %s returned HTTP %d", method, service, resp.status)
+            return None
         return resp.getheader("SID")
     except Exception as e:
         log.debug("GENA %s %s failed: %s", method, service, e)
@@ -353,6 +356,14 @@ def _gena_subscribe_all():
             else:
                 all_ok = False
     return all_ok
+
+
+def _gena_unsubscribe_all():
+    """Best-effort UNSUBSCRIBE so the Sonos stops notifying a dead callback."""
+    with _gena_lock:
+        for svc, sid in list(_gena_sids.items()):
+            _gena_request("UNSUBSCRIBE", svc, {"SID": sid})
+            del _gena_sids[svc]
 
 
 def _gena_worker():
@@ -519,7 +530,11 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Connection", "keep-alive")
             self.end_headers()
 
-            _client_ready.set()
+            # Only count this as "the Sonos connected" if it actually is the
+            # Sonos — a stray LAN client fetching the URL must not satisfy
+            # session/start's wait.
+            if _sonos_ip is None or self.client_address[0] == _sonos_ip:
+                _client_ready.set()
             stream_start = time.monotonic()
 
             ffmpeg = subprocess.Popen(
@@ -600,6 +615,12 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         global _in_session, _sonos_paused
+
+        # Control endpoints are only ever called by the shairport-sync hook
+        # scripts on this host; don't let other LAN devices drive the session.
+        if self.client_address[0] != "127.0.0.1":
+            self.send_error(403)
+            return
 
         if self.path == "/session/start":
             global _session_start_time
@@ -906,4 +927,5 @@ if __name__ == "__main__":
         except (KeyboardInterrupt, SystemExit):
             pass
         finally:
+            _gena_unsubscribe_all()
             _teardown_pipe()
