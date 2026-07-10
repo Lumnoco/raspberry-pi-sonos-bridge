@@ -503,6 +503,22 @@ def _patch_flac_header(buf: bytes) -> bytes:
     return bytes(b)
 
 
+def _stop_ffmpeg(proc):
+    """Terminate ffmpeg, escalating to SIGKILL if it doesn't exit promptly.
+
+    ffmpeg's SIGTERM handler only sets a flag that its processing loop
+    checks; while blocked reading a FIFO that has never produced data, that
+    loop never runs and SIGTERM is effectively ignored. The stream handler
+    is itself blocked on ffmpeg's stdout at that point, so it can't clean
+    up either — without the SIGKILL the handler holds _stream_lock forever
+    and every new Sonos connection gets a 503."""
+    proc.terminate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
 class BridgeHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
@@ -632,7 +648,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 old_proc = _ffmpeg_proc
             if old_proc:
                 log.info("Terminating previous stream for new session")
-                old_proc.terminate()
+                _stop_ffmpeg(old_proc)
             if _stream_lock.acquire(timeout=8):
                 _stream_lock.release()
 
@@ -679,8 +695,9 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 _in_session   = False
                 _sonos_paused = False
             with _ffmpeg_lock:
-                if _ffmpeg_proc:
-                    _ffmpeg_proc.terminate()
+                proc = _ffmpeg_proc
+            if proc:
+                _stop_ffmpeg(proc)
             _client_ready.clear()
             if _stream_lock.acquire(timeout=5):
                 _stream_lock.release()
@@ -835,8 +852,9 @@ def _watchdog_worker():
 def _on_sigterm(signum, frame):
     log.info("SIGTERM — shutting down")
     with _ffmpeg_lock:
-        if _ffmpeg_proc:
-            _ffmpeg_proc.terminate()
+        proc = _ffmpeg_proc
+    if proc:
+        _stop_ffmpeg(proc)
     _teardown_pipe()
     raise SystemExit(0)
 
