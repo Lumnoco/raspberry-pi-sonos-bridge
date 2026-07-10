@@ -19,8 +19,10 @@ Configuration: /etc/sonos-bridge.conf (KEY=VALUE, one per line)
   PIPE_PATH     – optional; must match shairport-sync.conf
 """
 
+import argparse
 import http.client
 import http.server
+import json
 import logging
 import os
 import re
@@ -33,6 +35,8 @@ import sys
 import threading
 import time
 import urllib.request
+
+__version__ = "1.1.0"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -526,6 +530,27 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         global _ffmpeg_proc
 
+        if self.path == "/health":
+            with _state_lock:
+                state = {
+                    "in_session":    _in_session,
+                    "sonos_paused":  _sonos_paused,
+                }
+            with _ffmpeg_lock:
+                state["stream_active"] = _ffmpeg_proc is not None
+            with _gena_lock:
+                state["gena_subscribed"] = bool(_gena_sids)
+            state["sonos_ip"] = _sonos_ip
+            state["my_ip"]    = get_my_ip()
+            state["version"]  = __version__
+            body = json.dumps(state).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self.path != "/stream.flac":
             self.send_error(404)
             return
@@ -907,7 +932,7 @@ def _cmd_discover():
         except FileNotFoundError:
             lines = []
 
-        lines = [l for l in lines if not l.strip().startswith("SONOS_RINCON")]
+        lines = [ln for ln in lines if not ln.strip().startswith("SONOS_RINCON")]
         lines.append(new_line)
 
         with open(cfg_path, "w") as f:
@@ -923,7 +948,19 @@ def _cmd_discover():
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    if "--discover" in sys.argv:
+    parser = argparse.ArgumentParser(
+        description="Bridge AirPlay audio from shairport-sync to a Sonos speaker.",
+        epilog="Config is read from /etc/sonos-bridge.conf, then a .env file"
+               " next to bridge.py; environment variables override both.",
+    )
+    parser.add_argument("--discover", action="store_true",
+                        help="scan the LAN for Sonos devices and write the"
+                             " chosen RINCON to /etc/sonos-bridge.conf")
+    parser.add_argument("--version", action="version",
+                        version=f"%(prog)s {__version__}")
+    args = parser.parse_args()
+
+    if args.discover:
         _cmd_discover()
         sys.exit(0)
 
