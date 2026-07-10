@@ -483,6 +483,8 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        global _ffmpeg_proc
+
         if self.path != "/stream.flac":
             self.send_error(404)
             return
