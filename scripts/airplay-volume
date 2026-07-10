@@ -5,12 +5,14 @@
 AIRPLAY_DB="$1"
 [ -z "$AIRPLAY_DB" ] && exit 0
 
-SONOS_VOL=$(python3 -c "
-v = float('$AIRPLAY_DB')
-if v <= -30.0 or v <= -144.0:
-    print(0)
-else:
-    print(max(0, min(100, round((v + 30) / 30 * 100))))
-")
+# awk instead of python3: this runs on every volume tick and a full
+# interpreter start-up is noticeable on slower Pis.
+SONOS_VOL=$(awk -v v="$AIRPLAY_DB" 'BEGIN {
+    if (v <= -30.0) { print 0; exit }
+    vol = int((v + 30) / 30 * 100 + 0.5)
+    if (vol < 0) vol = 0
+    if (vol > 100) vol = 100
+    print vol
+}')
 
 curl -s -X POST "http://localhost:8080/volume/$SONOS_VOL" > /dev/null

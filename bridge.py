@@ -2,7 +2,7 @@
 """
 Sonos AirPlay Bridge
 
-Receives raw PCM from shairport-sync via a named FIFO, converts to MP3 via
+Receives raw PCM from shairport-sync via a named FIFO, converts to FLAC via
 ffmpeg, serves it over HTTP, and controls a Sonos speaker via UPnP/SOAP.
 
 Sonos IP is discovered automatically via SSDP using the device RINCON ID so
@@ -14,6 +14,7 @@ relayed to Apple Music through shairport-sync's MPRIS D-Bus interface.
 Configuration: /etc/sonos-bridge.conf (KEY=VALUE, one per line)
   SONOS_RINCON  – required; run --discover to find yours
   MY_IP         – optional; auto-detected from the default network interface
+  SONOS_PORT    – optional; default 1400
   STREAM_PORT   – optional; default 8080
   PIPE_PATH     – optional; must match shairport-sync.conf
 """
@@ -23,7 +24,6 @@ import http.server
 import logging
 import os
 import re
-import select
 import signal
 import socket
 import socketserver
@@ -94,9 +94,6 @@ def get_my_ip():
         if _my_ip_cache is None or _my_ip_cache.startswith("127."):
             _my_ip_cache = _auto_ip()
         return _my_ip_cache
-
-# AirPlay 2 native PCM format: S32LE stereo at 48 kHz
-PCM_FRAME = 48000 * 2 * 4  # bytes per second
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sonos-bridge")
@@ -527,7 +524,6 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "audio/flac")
             self.send_header("Cache-Control", "no-cache")
-            self.send_header("Connection", "keep-alive")
             self.end_headers()
 
             # Only count this as "the Sonos connected" if it actually is the
@@ -642,7 +638,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
 
             with _state_lock:
                 _sonos_paused = False
-            _session_start_time = time.monotonic()
+                _session_start_time = time.monotonic()
             _client_ready.clear()
 
             # Defensive: if the FIFO has gone missing since startup (e.g. someone
@@ -805,9 +801,10 @@ def _watchdog_worker():
         with _state_lock:
             if not _in_session or _sonos_paused:
                 continue
+            session_start = _session_start_time
         # Stand down during the initial connection window so session/start
         # retries don't race with watchdog reconnects.
-        if time.monotonic() - _session_start_time < 45:
+        if time.monotonic() - session_start < 45:
             continue
         state = _get_transport_state()
         if state is None:

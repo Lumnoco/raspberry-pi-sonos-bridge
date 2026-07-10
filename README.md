@@ -67,6 +67,7 @@ Your Pi will appear as **"Playbar"** (or whatever name you set in `shairport-syn
 |-----|----------|---------|-------------|
 | `SONOS_RINCON` | Yes | — | Device RINCON ID (run `--discover`) |
 | `MY_IP` | No | auto-detected | LAN IP of the Pi |
+| `SONOS_PORT` | No | `1400` | Port of the Sonos UPnP/SOAP interface |
 | `STREAM_PORT` | No | `8080` | Port the bridge HTTP server listens on |
 | `PIPE_PATH` | No | `/run/sonos-bridge/audio` | Must match `shairport-sync.conf` |
 
