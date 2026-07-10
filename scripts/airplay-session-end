@@ -1,2 +1,2 @@
 #!/bin/bash
-curl -s -X POST http://localhost:8080/session/stop
+curl -s -X POST --max-time 30 http://localhost:8080/session/stop

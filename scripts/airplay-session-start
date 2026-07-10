@@ -1,2 +1,5 @@
 #!/bin/bash
-curl -s -X POST http://localhost:8080/session/start
+# wait_for_completion=yes blocks AirPlay on this script; session/start can
+# legitimately take up to ~45 s (three connect attempts), so cap just above
+# that rather than letting a hung bridge freeze AirPlay indefinitely.
+curl -s -X POST --max-time 60 http://localhost:8080/session/start
