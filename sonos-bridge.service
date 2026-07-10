@@ -7,7 +7,9 @@ Before=shairport-sync.service
 [Service]
 RuntimeDirectory=sonos-bridge
 RuntimeDirectoryMode=0755
-ExecStartPre=/usr/bin/mkfifo -m 0666 /run/sonos-bridge/audio
+# "-" prefix: mkfifo fails if the FIFO already exists, and bridge.py's
+# _setup_pipe() creates it idempotently anyway.
+ExecStartPre=-/usr/bin/mkfifo -m 0666 /run/sonos-bridge/audio
 ExecStart=/usr/bin/python3 /opt/sonos-bridge/bridge.py
 Restart=on-failure
 RestartSec=10

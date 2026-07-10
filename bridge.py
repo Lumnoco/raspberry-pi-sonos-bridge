@@ -74,9 +74,26 @@ _cfg = _read_config()
 
 SONOS_RINCON = _cfg.get("SONOS_RINCON", "")
 SONOS_PORT   = int(_cfg.get("SONOS_PORT", 1400))
-MY_IP        = _cfg.get("MY_IP") or _auto_ip()
 STREAM_PORT  = int(_cfg.get("STREAM_PORT", 8080))
 PIPE_PATH    = _cfg.get("PIPE_PATH", "/run/sonos-bridge/audio")
+
+_my_ip_cfg   = _cfg.get("MY_IP", "")
+_my_ip_cache = None
+_my_ip_lock  = threading.Lock()
+
+
+def get_my_ip():
+    """Return the configured or auto-detected LAN IP.
+
+    Auto-detection is retried whenever the cached result is loopback, so a
+    service that started before the network was up recovers once it is."""
+    global _my_ip_cache
+    if _my_ip_cfg:
+        return _my_ip_cfg
+    with _my_ip_lock:
+        if _my_ip_cache is None or _my_ip_cache.startswith("127."):
+            _my_ip_cache = _auto_ip()
+        return _my_ip_cache
 
 # AirPlay 2 native PCM format: S32LE stereo at 48 kHz
 PCM_FRAME = 48000 * 2 * 4  # bytes per second
@@ -321,13 +338,13 @@ def _gena_subscribe_all():
                     log.info("GENA renewal failed for %s — re-subscribing", svc)
                     del _gena_sids[svc]
                     sid = _gena_request("SUBSCRIBE", svc, {
-                        "CALLBACK": f"<http://{MY_IP}:{STREAM_PORT}/events>",
+                        "CALLBACK": f"<http://{get_my_ip()}:{STREAM_PORT}/events>",
                         "NT":       "upnp:event",
                         "TIMEOUT":  "Second-3600",
                     })
             else:
                 sid = _gena_request("SUBSCRIBE", svc, {
-                    "CALLBACK": f"<http://{MY_IP}:{STREAM_PORT}/events>",
+                    "CALLBACK": f"<http://{get_my_ip()}:{STREAM_PORT}/events>",
                     "NT":       "upnp:event",
                     "TIMEOUT":  "Second-3600",
                 })
@@ -572,7 +589,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                             if not _in_session or _sonos_paused:
                                 return
                         _client_ready.clear()
-                        stream_url = f"http://{MY_IP}:{STREAM_PORT}/stream.flac"
+                        stream_url = f"http://{get_my_ip()}:{STREAM_PORT}/stream.flac"
                         sonos_set_uri(stream_url)
                         sonos_play()
                         if not _client_ready.wait(timeout=10):
@@ -617,7 +634,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 log.warning("FIFO %s missing — recreating", PIPE_PATH)
                 _setup_pipe()
 
-            stream_url = f"http://{MY_IP}:{STREAM_PORT}/stream.flac"
+            stream_url = f"http://{get_my_ip()}:{STREAM_PORT}/stream.flac"
             log.info("Sending stream URL to Sonos: %s", stream_url)
             sonos_set_uri(stream_url)
             sonos_play()
@@ -689,7 +706,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 log.info("Playback resumed — stream gone, re-establishing")
                 def _reestablish():
                     _client_ready.clear()
-                    stream_url = f"http://{MY_IP}:{STREAM_PORT}/stream.flac"
+                    stream_url = f"http://{get_my_ip()}:{STREAM_PORT}/stream.flac"
                     sonos_set_uri(stream_url)
                     sonos_play()
                     if not _client_ready.wait(timeout=10):
@@ -788,7 +805,7 @@ def _watchdog_worker():
                 if not _in_session or _sonos_paused:
                     continue
             _client_ready.clear()
-            stream_url = f"http://{MY_IP}:{STREAM_PORT}/stream.flac"
+            stream_url = f"http://{get_my_ip()}:{STREAM_PORT}/stream.flac"
             sonos_set_uri(stream_url)
             sonos_play()
             if not _client_ready.wait(timeout=10):
@@ -878,9 +895,12 @@ if __name__ == "__main__":
     threading.Thread(target=_watchdog_worker, daemon=True).start()
 
     socketserver.TCPServer.allow_reuse_address = True
+    # Daemon threads so a handler blocked reading ffmpeg output can't keep
+    # the process alive past SIGTERM.
+    socketserver.ThreadingTCPServer.daemon_threads = True
     with socketserver.ThreadingTCPServer(("", STREAM_PORT), BridgeHandler) as srv:
         log.info("Sonos AirPlay Bridge listening on :%d  (MY_IP=%s  RINCON=%s)",
-                 STREAM_PORT, MY_IP, SONOS_RINCON)
+                 STREAM_PORT, get_my_ip(), SONOS_RINCON)
         try:
             srv.serve_forever()
         except (KeyboardInterrupt, SystemExit):
